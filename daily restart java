@@ -1,0 +1,53 @@
+#!/bin/bash
+today=$(date +%Y%m%d)
+#echo $today > /root/LCS_Restart_Log/$today.log
+wasLPMS_Home=/app/wasLPMS
+startrestart=1
+countrestart=0
+while [ $startrestart -eq 1 ]
+do
+#STOP and CHECK
+kq=$(ps -ef | grep LPMS 2>&1 | grep 'was' | awk '{print $1}' | wc -l)
+if [ $kq -gt 0 ]; then
+        sid=$(ps -ef | grep LPMS 2>&1 | grep 'was' | awk '{print $2}'  | sed -n 1p)
+        kill -9 $sid
+        checkstop=1
+        while [ $checkstop -eq 1 ]
+        do
+          kq=$(ps -ef | grep LPMS 2>&1 | grep 'was' | awk '{print $1}' | wc -l)
+          if [ $kq -eq 0 ]; then
+                checkstop=2
+          else
+                sleep 3
+                sid=$(ps -ef | grep LPMS 2>&1 | grep 'was' | awk '{print $2}'  | sed -n 1p)
+                kill -9 $sid
+          fi
+        done
+fi
+#START and CHECK
+timestart=0
+cd $wasLPMS_Home
+sh ./tomcat8.sh start
+checkstart=1
+while [ $checkstart -eq 1 ]
+do
+        kqst=$(curl http://10.91.8.31:8100/jw/web/userview/appcenter/v/_/home 2>&1 | grep 'Powered by Joget')
+        if [[ -n $kqst ]]; then
+                checkstart=2
+                startrestart=2
+#               echo LCS LPMS node restart succsessful  >> /root/LCS_Restart_Log/$today.log
+        else
+                let timestart++
+        fi
+        sleep 3
+        if [ $timestart -eq 15 ]; then
+                checkstart=2
+                timestart=0
+                let countrestart++
+        fi
+        if [ $countrestart -eq 2 ]; then
+                startrestart=2
+                tail -200 $wasLPMS_Home/apache-tomcat-8.5.23/logs/catalina.out >> /root/LCS_Restart_Log/LPMS_$today.log
+        fi
+done
+done
